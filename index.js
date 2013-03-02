@@ -32,7 +32,11 @@ function Game(opts) {
   if (!('generateChunks' in opts)) opts.generateChunks = true
   this.generateChunks = opts.generateChunks
   this.axes = ['x', 'y', 'z']
-  this.setConfigurablePositions(opts)
+
+  this.gravity = this.coerceVector3(opts.gravity) || new THREE.Vector3(0, -0.0000036, 0)
+  this.startingPosition = this.coerceVector3(opts.startingPosition) || new THREE.Vector3(35,1024,35)
+  this.worldOrigin = this.coerceVector3(opts.worldOrigin) || new THREE.Vector3(0,0,0)
+
   this.configureChunkLoading(opts)
   this.THREE = THREE
 
@@ -44,7 +48,6 @@ function Game(opts) {
   this.chunkDistance = opts.chunkDistance || 2
   this.removeDistance = opts.removeDistance || this.chunkDistance + 1
   
-  this.playerHeight = opts.playerHeight || 1.62
   this.meshType = opts.meshType || 'surfaceMesh'
   this.mesher = opts.mesher || voxel.meshers.greedy
   this.materialType = opts.materialType || THREE.MeshLambertMaterial
@@ -70,6 +73,7 @@ function Game(opts) {
   
   this.timer = this.initializeTimer((opts.tickFPS || 16))
   this.paused = false
+
 
   this.spatial = new SpatialEventEmitter
   this.region = regionChange(this.spatial, aabb([0, 0, 0], [1, 1, 1]), this.chunkSize)
@@ -248,36 +252,6 @@ Game.prototype.appendTo = function (element) {
   this.view.appendTo(element)
 }
 
-// # Defaults/options parsing
-
-Game.prototype.gravity = new THREE.Vector3(0, -0.0000036, 0)
-
-Game.prototype.defaultButtons = {
-  'W': 'forward'
-, 'A': 'left'
-, 'S': 'backward'
-, 'D': 'right'
-, '<mouse 1>': 'fire'
-, '<mouse 2>': 'firealt'
-, '<space>': 'jump'
-, '<control>': 'alt'
-}
-
-Game.prototype.parseVectorOption = function(vector) {
-  if (!vector) return
-  if (vector.length && typeof vector.length === 'number') return new THREE.Vector3(vector[0], vector[1], vector[2])
-  if (typeof vector === 'object') return new THREE.Vector3(vector.x, vector.y, vector.z)
-}
-
-Game.prototype.setConfigurablePositions = function(opts) {
-  var sp = opts.startingPosition
-  if (sp) sp = this.parseVectorOption(sp)
-  this.startingPosition = sp || new THREE.Vector3(35,1024,35)
-  var wo = opts.worldOrigin
-  if (wo) wo = this.parseVectorOption(wo)
-  this.worldOrigin = wo || new THREE.Vector3(0,0,0)
-}
-
 Game.prototype.notCapable = function() {
   if( !Detector().webgl ) {
     var wrapper = document.createElement('div')
@@ -298,6 +272,11 @@ Game.prototype.onWindowResize = function() {
 }
 
 // # Physics/collision related methods
+Game.prototype.coerceVector3 = function(vector) {
+  if (!vector) return null
+  if (vector.length && typeof vector.length === 'number') return new THREE.Vector3(vector[0], vector[1], vector[2])
+  if (typeof vector === 'object') return new THREE.Vector3(vector.x, vector.y, vector.z)
+}
 
 Game.prototype.control = function(target) {
   this.controlling = target
@@ -306,21 +285,6 @@ Game.prototype.control = function(target) {
 
 Game.prototype.potentialCollisionSet = function() {
   return [{ collide: this.collideTerrain.bind(this) }]
-}
-
-Game.prototype.playerAABB = function(position) {
-  var pos = position || this.controls.target().avatar.position
-
-  var bbox = aabb([
-    pos.x - 1/4,
-    pos.y - this.playerHeight,
-    pos.z - 1/4
-  ], [
-    1/2,
-    this.playerHeight,
-    1/2
-  ])
-  return bbox
 }
 
 Game.prototype.collideTerrain = function(other, bbox, vec, resting) {
@@ -417,10 +381,10 @@ Game.prototype.chunkToWorld = function(pos) {
   }
 }
 
-Game.prototype.removeFarChunks = function(playerPosition) {
+Game.prototype.removeFarChunks = function(streamPosition) {
   var self = this
-  playerPosition = playerPosition || this.controls.target().avatar.position
-  var nearbyChunks = this.voxels.nearbyChunks(playerPosition, this.removeDistance).map(function(chunkPos) {
+  streamPosition = streamPosition || this.cameraPosition()
+  var nearbyChunks = this.voxels.nearbyChunks(streamPosition, this.removeDistance).map(function(chunkPos) {
     return chunkPos.join('|')
   })
   Object.keys(self.voxels.chunks).map(function(chunkIndex) {
@@ -438,7 +402,7 @@ Game.prototype.removeFarChunks = function(playerPosition) {
     delete chunk.surfaceMesh
     delete self.voxels.chunks[chunkIndex]
   })
-  self.voxels.requestMissingChunks(playerPosition)
+  self.voxels.requestMissingChunks(streamPosition)
 }
 
 Game.prototype.addChunkToNextUpdate = function(chunk) {
@@ -593,6 +557,17 @@ Game.prototype.initializeRendering = function() {
     self.render(dt)
     stats.update()
   })
+}
+
+Game.prototype.defaultButtons = {
+  'W': 'forward'
+, 'A': 'left'
+, 'S': 'backward'
+, 'D': 'right'
+, '<mouse 1>': 'fire'
+, '<mouse 2>': 'firealt'
+, '<space>': 'jump'
+, '<control>': 'alt'
 }
 
 Game.prototype.initializeControls = function(opts) {
