@@ -65,11 +65,11 @@ See implementation of `Game.prototype.playerAABB` for more details.
 * `x`, `z`: horizontal plane
 * `y`: vertical plane
 
-We use various forms to represent positions (this will likely be simplified in the future):
+We try to always use arrays to represent vectors (aka positions)
 
-* `{x: Number, y: Number, z: Number}`
-* `[x, y, z]` and
-* Three.js's `Vector3`. Vector3 is rad and has a bunch of operations that allow you to combine vectors in various ways.
+* `[x, y, z]`
+
+Sometimes you may also see objects used, e.g. `{x: 0, y: 0, z: 0}`, this is because three.js uses objects for vectors.
 
 ## Generating voxel worlds
 
@@ -119,13 +119,6 @@ game.controls.target().avatar.position()
 
 This returns a THREE.js Vector3 object (which just means an object with 'x', 'y', and 'z').
 
-### Check if there's a block at a position
-```js
-
-// returns 0 or 1-9 depending whether block at that position exists and is 'on'
-gameInstance.getVoxel(pos)
-```
-
 ### Toggle a block on/off
 
 ```js
@@ -159,6 +152,20 @@ Intended for use in first player contexts as it checks if a player is standing i
 `gameInstance.getBlock(pos)`
 
 If you wanna see the lower level API for voxel data manipulation look at `chunker.js` inside the voxel module.
+
+### Raycast
+
+shoots a ray and collides with voxels
+
+`gameInstance.raycast(start, position, distance)`
+
+if you just type `gameInstance.raycast()` it will default to using the current main camera position and direction, and default distance of 10
+
+you will get back an object with the position, direction, face normal and voxel value of the voxel that you intersected, or `false` if there was no collision
+
+### Create a new voxel adjacent to an existing voxel
+
+first do a `.raycast()` then do `gameInstance.createAdjacent(raycastResults, materialIndex)`
 
 ## Game events
 
