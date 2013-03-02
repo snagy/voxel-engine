@@ -5,7 +5,6 @@ var ray = require('voxel-raycast')
 var texture = require('voxel-texture')
 var control = require('voxel-control')
 var voxelView = require('voxel-view')
-var THREE = require('three')
 var Stats = require('./lib/stats')
 var Detector = require('./lib/detector')
 var inherits = require('inherits')
@@ -34,12 +33,12 @@ function Game(opts) {
   if (!('generateChunks' in opts)) opts.generateChunks = true
   this.generateChunks = opts.generateChunks
 
-  this.gravity = this.coerceVector3(opts.gravity) || new THREE.Vector3(0, -0.0000036, 0)
-  this.startingPosition = this.coerceVector3(opts.startingPosition) || new THREE.Vector3(35,1024,35)
-  this.worldOrigin = this.coerceVector3(opts.worldOrigin) || new THREE.Vector3(0,0,0)
+  this.gravity = this.coerceVector3(opts.gravity) || [0, -0.0000036, 0]
+  this.startingPosition = this.coerceVector3(opts.startingPosition) || [35,1024,35]
+  this.worldOrigin = this.coerceVector3(opts.worldOrigin) || [0,0,0]
 
   this.configureChunkLoading(opts)
-  this.THREE = THREE
+  this.THREE = opts.three || require('three');
   this.vector = vector
   this.glMatrix = glMatrix
 
@@ -53,16 +52,16 @@ function Game(opts) {
   
   this.meshType = opts.meshType || 'surfaceMesh'
   this.mesher = opts.mesher || voxel.meshers.greedy
-  this.materialType = opts.materialType || THREE.MeshLambertMaterial
+  this.materialType = opts.materialType || this.THREE.MeshLambertMaterial
   this.materialParams = opts.materialParams || {}
   this.items = []
   this.voxels = voxel(this)
   this.chunkGroups = voxelChunks(this)
   this.height = typeof window === "undefined" ? 1 : window.innerHeight
   this.width = typeof window === "undefined" ? 1 : window.innerWidth
-  this.scene = new THREE.Scene()
+  this.scene = new this.THREE.Scene()
 
-  this.view = opts.view || new voxelView(THREE, { width: this.width, height: this.height })
+  this.view = opts.view || new voxelView(this.THREE, { width: this.width, height: this.height })
   this.view.bindToScene(this.scene)
   this.camera = this.view.getCamera()
   if (!opts.lightsDisabled) this.addLights(this.scene)
@@ -87,9 +86,9 @@ function Game(opts) {
   this.chunksNeedsUpdate = {}
 
   this.materials = texture({
-    THREE: THREE,
+    THREE: this.THREE,
     texturePath: opts.texturePath || './textures/',
-    materialType: opts.materialType || THREE.MeshLambertMaterial,
+    materialType: opts.materialType || this.THREE.MeshLambertMaterial,
     materialParams: opts.materialParams || {}
   })
 
@@ -119,13 +118,18 @@ inherits(Game, EventEmitter)
 // # External API
 
 Game.prototype.cameraPosition = function() {
-  var pos = this.view.cameraPosition()
-  return [pos.x, pos.y, pos.z]
+  return this.view.cameraPosition()
 }
 
 Game.prototype.cameraVector = function() {
-  var pos = this.view.cameraVector()
-  return [pos.x, pos.y, pos.z]
+  return this.view.cameraVector()
+}
+
+Game.prototype.playerPosition = function() {
+  var target = this.controls.target()
+  if (!target) return false
+  var position = target.avatar.position
+  return [position.x, position.y, position.z]
 }
 
 Game.prototype.makePhysical = function(target, envelope, blocksCreation) {
@@ -186,7 +190,7 @@ Game.prototype.raycastVoxels = function(start, direction, maxDistance) {
 }
 
 Game.prototype.checkBlock = function(pos) {
-  pos = this.parseVectorArguments(arguments)
+  pos = this.coerceVector3(arguments)
   var floored = pos.map(function(i) { return Math.floor(i) })
   var bbox
   
@@ -232,7 +236,7 @@ Game.prototype.setBlock = function(pos, val) {
 }
 
 Game.prototype.getBlock = function(pos) {
-  pos = this.parseVectorArguments(arguments)
+  pos = this.coerceVector3(arguments)
   if (pos.chunkMatrix) return this.chunkGroups.getBlock(pos)
   return this.voxels.voxelAtPosition(pos)
 }
@@ -281,17 +285,6 @@ Game.prototype.potentialCollisionSet = function() {
   return [{ collide: this.collideTerrain.bind(this) }]
 }
 
-
-Game.prototype.playerAABB = function(position) {
-  var pos = position || this.playerPosition()
-  var lower = []
-  var upper = [1/2, this.playerHeight, 1/2]
-  var playerBottom = [1/4, this.playerHeight, 1/4]
-  vector.subtract(lower, pos, playerBottom)
-  var bbox = aabb(lower, upper)
-  return bbox
-}
-
 Game.prototype.collideTerrain = function(other, bbox, vec, resting) {
   var axes = ['x', 'y', 'z']
   var vec3 = [vec.x, vec.y, vec.z]
@@ -317,9 +310,9 @@ Game.prototype.addStats = function() {
 
 Game.prototype.addLights = function(scene) {
   var ambientLight, directionalLight
-  ambientLight = new THREE.AmbientLight(0xcccccc)
+  ambientLight = new this.THREE.AmbientLight(0xcccccc)
   scene.add(ambientLight)
-  var light	= new THREE.DirectionalLight( 0xffffff , 1)
+  var light	= new this.THREE.DirectionalLight( 0xffffff , 1)
   light.position.set( 1, 1, 0.5 ).normalize()
   scene.add( light )
 }
@@ -403,14 +396,14 @@ Game.prototype.getChunkAtPosition = function(pos) {
 Game.prototype.showChunk = function(chunk) {
   var chunkIndex = chunk.position.join('|')
   var bounds = this.voxels.getBounds.apply(this.voxels, chunk.position)
-  var scale = new THREE.Vector3(1, 1, 1)
+  var scale = new this.THREE.Vector3(1, 1, 1)
   var mesh = voxelMesh(chunk, this.mesher, scale)
   this.voxels.chunks[chunkIndex] = chunk
   if (this.voxels.meshes[chunkIndex]) this.scene.remove(this.voxels.meshes[chunkIndex][this.meshType])
   this.voxels.meshes[chunkIndex] = mesh
   if (process.browser) {
     if (this.meshType === 'wireMesh') mesh.createWireMesh()
-    else mesh.createSurfaceMesh(new THREE.MeshFaceMaterial(this.materials.get()))
+    else mesh.createSurfaceMesh(new this.THREE.MeshFaceMaterial(this.materials.get()))
     this.materials.paint(mesh.geometry)
   }
   mesh.setPosition(bounds[0][0], bounds[0][1], bounds[0][2])
@@ -421,17 +414,17 @@ Game.prototype.showChunk = function(chunk) {
 // # Debugging methods
 
 Game.prototype.addMarker = function(position) {
-  var geometry = new THREE.SphereGeometry( 0.5, 10, 10 )
-  var material = new THREE.MeshPhongMaterial( { color: 0xffffff, shading: THREE.FlatShading } )
-  var mesh = new THREE.Mesh( geometry, material )
+  var geometry = new this.THREE.SphereGeometry( 0.5, 10, 10 )
+  var material = new this.THREE.MeshPhongMaterial( { color: 0xffffff, shading: this.THREE.FlatShading } )
+  var mesh = new this.THREE.Mesh( geometry, material )
   mesh.position.copy(position)
   this.scene.add(mesh)
 }
 
 Game.prototype.addAABBMarker = function(aabb, color) {
-  var geometry = new THREE.CubeGeometry(aabb.width(), aabb.height(), aabb.depth())
-  var material = new THREE.MeshBasicMaterial({ color: color || 0xffffff, wireframe: true, transparent: true, opacity: 0.5, side: THREE.DoubleSide })
-  var mesh = new THREE.Mesh(geometry, material)
+  var geometry = new this.THREE.CubeGeometry(aabb.width(), aabb.height(), aabb.depth())
+  var material = new this.THREE.MeshBasicMaterial({ color: color || 0xffffff, wireframe: true, transparent: true, opacity: 0.5, side: this.THREE.DoubleSide })
+  var mesh = new this.THREE.Mesh(geometry, material)
   mesh.position.set(aabb.x0() + aabb.width() / 2, aabb.y0() + aabb.height() / 2, aabb.z0() + aabb.depth() / 2)
   this.scene.add(mesh)
   return mesh

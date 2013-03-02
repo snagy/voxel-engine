@@ -9,7 +9,7 @@
   "dependencies": {
     "voxel": "0.2.0",
     "voxel-mesh": "0.1.1",
-    "voxel-view": "0.0.4",
+    "voxel-view": "0.0.5",
     "voxel-chunks": "0.0.2",
     "voxel-raycast": "0.0.6",
     "voxel-control": "0.0.7",
